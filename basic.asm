@@ -15,6 +15,8 @@
         ;                             statement.
         ;
 
+        ; Revision date: Jan/12/2020. Implimentation for macOS(386 32bit) by @taisukef
+
         ;
         ; USER'S MANUAL:
         ;
@@ -117,8 +119,18 @@
         ; 210 if i-n-1 goto 30
         ;
 
-        cpu 8086
+        ; cpu 8086 ; original
+        cpu 386 ; for 32bit
 
+section .text
+global _main
+
+section .bss
+        ram resb 0x10000
+        putchar_buf resb 1
+        getchar_buf resb 1
+
+section .text
     %ifndef com_file    ; If not defined create a boot sector
 com_file:       equ 0
     %endif
@@ -126,41 +138,43 @@ com_file:       equ 0
     %if com_file
         org 0x0100
     %else
-        org 0x7c00
+        ;org 0x7c00
     %endif
 
-vars:       equ 0x7e00  ; Variables (multiple of 256)
-running:    equ 0x7e7e  ; Running status
-line:       equ 0x7e80  ; Line input
-program:    equ 0x7f00  ; Program address
-stack:      equ 0xff00  ; Stack address
+vars:       equ ram + 0x7e00  ; Variables (multiple of 256)
+running:    equ ram + 0x7e7e  ; Running status
+line:       equ ram + 0x7e80  ; Line input
+program:    equ ram + 0x7f00  ; Program address
+;stack:      equ ram + 0xff00  ; Stack address
 max_line:   equ 1000    ; First unavailable line number
 max_length: equ 20      ; Maximum length of line
-max_size:   equ max_line*max_length ; Max. program size
+max_size:   equ max_line * max_length ; Max. program size
 
+_main:
 start:
     %if com_file
     %else
-        push cs         ; For boot sector
-        push cs         ; it needs to setup
-        push cs         ; DS, ES and SS.
-        pop ds
-        pop es
-        pop ss
+        ;push cs         ; For boot sector
+        ;push cs         ; it needs to setup
+        ;push cs         ; DS, ES and SS.
+        ;pop ds
+        ;pop es
+        ;pop ss
     %endif
+
         cld             ; Clear Direction flag
-        mov di,program  ; Point to program
+        mov edi,program  ; Point to program
         mov al,0x0d     ; Fill with CR
         mov cx,max_size ; Max. program size
         rep stosb       ; Initialize
-
         ;
         ; Main loop
         ;
 main_loop:
-        mov sp,stack    ; Reinitialize stack pointer
-        mov ax,main_loop
-        push ax
+        ;mov esp,stack    ; Reinitialize stack pointer
+        mov eax,main_loop
+        push eax
+
         xor ax,ax       ; Mark as interactive
         mov [running],ax
         mov al,'>'      ; Show prompt
@@ -169,7 +183,7 @@ main_loop:
         or ax,ax        ; No number or zero?
         je statement    ; Yes, jump
         call find_line  ; Find the line
-        xchg ax,di      
+        xchg eax,edi      
 ;       mov cx,max_length       ; CX loaded with this value in 'find_line'
         rep movsb       ; Copy entered line into program
         ret
@@ -183,29 +197,29 @@ if_statement:
         je f6           ; Yes, return (ignore if)
 statement:
         call spaces     ; Avoid spaces
-        cmp byte [si],0x0d  ; Empty line?
+        cmp byte [esi],0x0d  ; Empty line?
         je f6           ; Yes, return
-        mov di,statements   ; Point to statements list
-f5:     mov al,[di]     ; Read length of the string
-        inc di          ; Avoid length byte
+        mov edi,statements   ; Point to statements list
+f5:     mov al,[edi]     ; Read length of the string
+        inc edi          ; Avoid length byte
         and ax,0x00ff   ; Is it zero?
         je f4           ; Yes, jump
         xchg ax,cx
-        push si         ; Save current position
+        push esi         ; Save current position
 f16:    rep cmpsb       ; Compare statement
         jne f3          ; Equal? No, jump
-        pop ax
+        pop eax
         call spaces     ; Avoid spaces
-        jmp word [di]   ; Jump to process statement
+        jmp word [edi]   ; Jump to process statement
 
-f3:     add di,cx       ; Advance the list pointer
-        inc di          ; Avoid the address
-        inc di
-        pop si
+f3:     add edi,ecx       ; Advance the list pointer
+        inc edi          ; Avoid the address
+        inc edi
+        pop esi
         jmp f5          ; Compare another statement
 
 f4:     call get_variable       ; Try variable
-        push ax         ; Save address
+        push eax         ; Save address
         lodsb           ; Read a line letter
         cmp al,'='      ; Is it assignment '=' ?
         je assignment   ; Yes, jump to assignment.
@@ -214,7 +228,7 @@ f4:     call get_variable       ; Try variable
         ; An error happened
         ;
 error:
-        mov si,error_message
+        mov esi,error_message
         call print_2    ; Show error message
         jmp main_loop   ; Exit to main loop
 
@@ -225,21 +239,21 @@ error_message:
         ; Handle 'list' statement
         ;
 list_statement:
-        xor ax,ax       ; Start from line zero
-f29:    push ax
+        xor eax,eax       ; Start from line zero
+f29:    push eax
         call find_line  ; Find program line
-        xchg ax,si
-        cmp byte [si],0x0d ; Empty line?
+        xchg eax,esi
+        cmp byte [esi],0x0d ; Empty line?
         je f30          ; Yes, jump
-        pop ax
-        push ax
+        pop eax
+        push eax
         call output_number ; Show line number
 f32:    lodsb           ; Show line contents
         call output
         jne f32         ; Jump if it wasn't 0x0d (CR)
-f30:    pop ax
-        inc ax          ; Go to next line
-        cmp ax,max_line ; Finished?
+f30:    pop eax
+        inc eax          ; Go to next line
+        cmp eax,max_line ; Finished?
         jne f29         ; No, continue
 f6:
         ret
@@ -249,7 +263,7 @@ f6:
         ;
 input_statement:
         call get_variable   ; Get variable address
-        push ax             ; Save it
+        push eax             ; Save it
         mov al,'?'          ; Prompt
         call input_line     ; Wait for line
         ;
@@ -257,7 +271,7 @@ input_statement:
         ;
 assignment:
         call expr           ; Process expression
-        pop di
+        pop edi
         stosw               ; Save onto variable
         ret
 
@@ -267,9 +281,9 @@ assignment:
         ;
 expr:
         call expr1          ; Call second tier
-f20:    cmp byte [si],'-'   ; Subtraction operator?
+f20:    cmp byte [esi],'-'   ; Subtraction operator?
         je f19              ; Yes, jump
-        cmp byte [si],'+'   ; Addition operator?
+        cmp byte [esi],'+'   ; Addition operator?
         jne f6              ; No, return
         push ax
         call expr1_2        ; Call second tier
@@ -288,12 +302,12 @@ f19:
         ; Second tier: division & multiplication.
         ;
 expr1_2:
-        inc si              ; Avoid operator
+        inc esi              ; Avoid operator
 expr1:
         call expr2          ; Call third tier
-f21:    cmp byte [si],'/'   ; Division operator?
+f21:    cmp byte [esi],'/'   ; Division operator?
         je f23              ; Yes, jump
-        cmp byte [si],'*'   ; Multiplication operator?
+        cmp byte [esi],'*'   ; Multiplication operator?
         jne f6              ; No, return
 
         push ax
@@ -316,26 +330,26 @@ f23:
         ; Third tier: parentheses, numbers and vars.
         ;
 expr2_2:
-        inc si              ; Avoid operator
+        inc esi              ; Avoid operator
 expr2:
         call spaces         ; Jump spaces
         lodsb               ; Read character
         cmp al,'('          ; Open parenthesis?
         jne f24
         call expr           ; Process inner expr.
-        cmp byte [si],')'   ; Closing parenthesis?
+        cmp byte [esi],')'   ; Closing parenthesis?
         je spaces_2         ; Yes, avoid spaces
         jmp error           ; No, jump to error
 
 f24:    cmp al,0x40         ; Variable?
         jnc f25             ; Yes, jump
-        dec si              ; Back one letter...
+        dec esi              ; Back one letter...
         call input_number   ; ...to read number
         jmp spaces          ; Avoid spaces
         
 f25:    call get_variable_2 ; Get variable address
-        xchg ax,bx
-        mov ax,[bx]         ; Read
+        xchg eax,ebx
+        mov ax,[ebx]         ; Read
         ret                 ; Return
 
         ;
@@ -344,20 +358,20 @@ f25:    call get_variable_2 ; Get variable address
 get_variable:
         lodsb               ; Read source
 get_variable_2:
-        and al,0x1f         ; 0x61-0x7a -> 0x01-0x1a
-        add al,al           ; x 2 (each variable = word)
-        mov ah,vars>>8      ; Setup high-byte of address
+        and ax,0x1f         ; 0x61-0x7a -> 0x01-0x1a
+        add ax,ax           ; x 2 (each variable = word)
+        add eax,vars
         ;
         ; Avoid spaces
         ;
 spaces:
-        cmp byte [si],' '   ; Space found?
+        cmp byte [esi],' '   ; Space found?
         jne f22             ; No, return
         ;
         ; Avoid spaces after current character
         ;
 spaces_2:
-        inc si              ; Advance to next character
+        inc esi              ; Advance to next character
         jmp spaces
 
         ;
@@ -394,7 +408,7 @@ f11:    lodsb               ; Read source
         add bx,ax           ; Add new digit
         jmp f11             ; Continue
 
-f12:    dec si              ; SI points to first non-digit
+f12:    dec esi              ; SI points to first non-digit
 f22:
         ret
 
@@ -402,14 +416,16 @@ f22:
         ; Handle 'system' statement
         ;
 system_statement:
-        int 0x20
+        ;int 0x20
+        call syscall_exit
 
         ;
         ; Handle 'goto' statement
         ;
 goto_statement:
         call expr           ; Handle expression
-        db 0xb9             ; MOV CX to jump over XOR AX,AX
+        ;db 0xb9             ; MOV CX to jump over XOR AX,AX
+        jmp f10
 
         ;
         ; Handle 'run' statement
@@ -424,13 +440,13 @@ f27:    cmp word [running],0 ; Already running?
         mov [running],ax    ; Yes, target is new line
         ret
 f31:
-        push ax
-        pop si
+        push eax
+        pop esi
         add ax,max_length   ; Point to next line
         mov [running],ax    ; Save for next time
         call statement      ; Process current statement
         mov ax,[running]
-        cmp ax,program+max_size ; Reached the end?
+        cmp ax,program + max_size ; Reached the end?
         jne f31             ; No, continue
         ret                 ; Yes, return
 
@@ -439,11 +455,11 @@ f31:
         ; Entry:
         ;   ax = line number
         ; Result:
-        ;   ax = pointer to program
+        ;   eax = pointer to program
 find_line:
-        mov cx,max_length
-        mul cx
-        add ax,program
+        mov ecx,max_length
+        mul ecx
+        add eax,program
         ret
 
         ;
@@ -456,16 +472,16 @@ find_line:
         ;
 input_line:
         call output
-        mov si,line
-        push si
-        pop di          ; Target for writing line
+        mov esi,line
+        push esi
+        pop edi          ; Target for writing line
 f1:     call input_key  ; Read keyboard
         stosb           ; Save key in buffer
         cmp al,0x08     ; Backspace?
         jne f2          ; No, jump
-        dec di          ; Get back one character
-        dec di
-f2:     cmp al,0x0d     ; CR pressed?
+        dec edi          ; Get back one character
+        dec edi
+f2:     cmp al, 0x0d    ; CR pressed?
         jne f1          ; No, wait another key
         ret             ; Yes, return
 
@@ -487,7 +503,7 @@ f9:
         jne f9          ; Jump if not finished with 0x0d (CR)
         ret             ; Return
 
-f7:     dec si
+f7:     dec esi
         call expr       ; Handle expression
         call output_number      ; Output result
 f18:    lodsb           ; Read next character
@@ -500,8 +516,10 @@ f18:    lodsb           ; Read next character
         ; Also outputs it to screen
         ;
 input_key:
-        mov ah,0x00
-        int 0x16
+        ;mov ah,0x00
+        ;int 0x16
+        call syscall_getchar
+
         ;
         ; Screen output of character contained in al
         ; Expands 0x0d (CR) into 0x0a 0x0d (LF CR)
@@ -517,9 +535,9 @@ new_line:
         call f17
         mov al,0x0d
 f17:
-        mov ah,0x0e
-        mov bx,0x0007
-        int 0x10
+        ;mov ah,0x0e
+        ;mov bx,0x0007
+        call syscall_putchar ;int 0x10
         cmp al,0x0d
         ret
 
@@ -561,7 +579,65 @@ statements:
         ;
     %if com_file
     %else
-        times 510-($-$$) db 0x4f
-        db 0x55,0xaa            ; Make it a bootable sector
+        ;times 510-($-$$) db 0x4f
+        ;db 0x55,0xaa            ; Make it a bootable sector
     %endif
 
+syscall_param3:
+        push dword ebp
+        mov ebp, esp
+        push dword edx
+        push dword ecx
+        push dword ebx
+        sub esp, 4
+        int 0x80
+        add esp, 16
+        pop ebp
+        ret
+
+syscall_putchar:
+        push ecx
+        push edx
+        push ebx
+        push eax
+        mov [putchar_buf], al
+        mov ecx, putchar_buf
+        mov edx, 1 ; size
+        mov ebx, 1 ; stdout
+        mov eax, 4 ; syscall SYS_write
+        call syscall_param3
+        pop eax
+        pop ebx
+        pop edx
+        pop ecx
+        ret
+
+syscall_getchar:
+        push ebx
+        push ecx
+        push edx
+        mov ecx, getchar_buf
+        mov edx, 1 ; size
+        mov ebx, 0 ; stdin
+        mov eax, 3 ; syscall SYS_read
+        call syscall_param3
+        mov al, [getchar_buf]
+        mov ah, 0
+        pop edx
+        pop ecx
+        pop ebx
+
+        ; on Mac 0x0a -> 0x0d
+        cmp al, 0x0a
+        jne syscall_getchar_skip
+        mov al, 0x0d
+syscall_getchar_skip:
+        ret
+
+syscall_exit:
+        mov ecx, 0
+        mov edx, 0
+        mov ebx, 0 ; exit code
+        mov eax, 1 ; syscall SYS_exit
+        call syscall_param3
+        ret
