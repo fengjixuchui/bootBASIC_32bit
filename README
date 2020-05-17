@@ -1,6 +1,9 @@
 bootBASIC_32bit is an implementation of bootBASIC for macOS by @taisukef  
 https://fukuno.jig.jp/2729  
 
+also bootBASIC_64bit
+https://github.com/taisukef/bootBASIC_64bit
+
 Use this command line on macOS:
   sh c.sh
 
