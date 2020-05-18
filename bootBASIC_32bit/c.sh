@@ -1,4 +1,3 @@
-nasm -f macho64 basic.asm
+nasm -f macho32 basic.asm
 ld -lSystem basic.o -o bootbasic
 ./bootbasic
-echo $?
