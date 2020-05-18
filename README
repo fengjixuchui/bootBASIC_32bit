@@ -1,8 +1,9 @@
-bootBASIC_32bit is an implementation of bootBASIC for macOS by @taisukef  
+bootBASIC_64bit is an implementation of bootBASIC for macOS by @taisukef  
+https://fukuno.jig.jp/2853  
+
+also bootBASIC_32bit is an implementation of bootBASIC for macOS by @taisukef  
 https://fukuno.jig.jp/2729  
 
-also bootBASIC_64bit
-https://github.com/taisukef/bootBASIC_64bit
 
 Use this command line on macOS:
   sh c.sh
@@ -53,13 +54,13 @@ Only 19 characters per line as maximum.
 Backspace can be used, don't be fooled by the fact
 that screen isn't deleted (it's all right in the buffer).
         
-All statements must be in lowercase.
+All statements must be in lowercase. (-> case insensitive in 64bit)
 
 Line numbers can be 1 to 999.
 
 26 variables are available (a-z)
 
-Numbers (0-65535) can be entered and display as unsigned.
+Numbers (0-65535) can be entered and display as unsigned.  (-> 64bit in 64bit)
         
 To enter new program lines:
   10 print "Hello, world!"
